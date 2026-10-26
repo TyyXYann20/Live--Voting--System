@@ -21,4 +21,17 @@ Run against a dedicated Supabase test project and production-like HTTPS build. N
 | Devices                   | Test 390px phone, 768px tablet, laptop and 1920×1080 projector. Keyboard-only controls, dialog focus/Escape, screen-reader labels, and reduced motion remain usable.                                                                                            |
 | Deployment                | Hard refresh every route, verify no console/app errors, run build, confirm no `.env` or service key in Git/build, verify Vercel plan eligibility, CAPTCHA, Supabase capacity and backups.                                                                       |
 
+## Participant management upgrade acceptance
+
+Apply `202610270001_participant_management.sql` once to an existing test project after the original migration. Existing sessions, participants and votes must remain unchanged by applying it.
+
+- In a live session, revoke a participant's vote. The ballot must disappear from `votes`, live totals must decrease, the original ballot/actor/time must appear only in the admin `participant_events` audit, and the registration must remain.
+- Refresh the participant page in the original browser. Submit again with the original team (and original code in secure mode); exactly one replacement vote is accepted. The next duplicate fails. Repeat in both code and open modes.
+- Race revoke against a replacement vote on distinct database connections. Session/participant locks must serialize the operations without allowing two active ballots.
+- Delete an unused registration and verify its code no longer resolves. A registration with a vote must reject deletion until its vote is revoked. Wrong-session participant IDs, non-admin callers, and direct writes must fail.
+- Stop/archive the session and verify revoke/delete/register all reject server-side while the final snapshot remains unchanged.
+- Open registration, revoke and delete dialogs at 320px and 390px widths. Confirm centered placement, readable content, touch controls, no page overflow, Tab/Shift+Tab containment, Escape/Cancel behavior, and visible inline server errors. During a pending request, close/cancel/confirm controls must not allow duplicate actions.
+- In an open session, verify the page explains automatic registration. For secure sessions, verify manual registration and the one-time code dialog still work.
+- Never publish `participant_events`, `votes`, or `participants` through Realtime. Inspect a public subscriber while revoking: visible aggregate results may update, but ballot details and audit records must not leak.
+
 Local automated scope: embedded PostgreSQL tests validate SQL invariants and RLS with real SQL roles, but run within a single embedded instance and do not certify parallel network transactions or Supabase logical replication. Browser tests use HTTP fixtures and intentionally do not claim hosted backend verification. A physically scanned QR, real Auth/CAPTCHA, production Realtime and Vercel deployment require the operator's configuration and devices.

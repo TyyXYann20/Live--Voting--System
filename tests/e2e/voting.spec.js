@@ -18,6 +18,9 @@ async function fixture(
     codes = false,
     status = "LIVE",
     signedIn = true,
+    people = [],
+    ballots = [],
+    managementError = null,
   } = {},
 ) {
   const errors = [];
@@ -86,6 +89,25 @@ async function fixture(
         data = { full_name: "Alex Johnson", team_id: a, has_voted: false };
       if (name === "issue_participant")
         data = { id: "new-person", code: "a".repeat(64) };
+      if (name === "manage_participant") {
+        if (managementError) {
+          await route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ message: managementError, code: "P0001" }),
+          });
+          return;
+        }
+        const index = ballots.findIndex(
+          (v) => v.participant_id === body.p_participant,
+        );
+        if (body.p_action === "revoke" && index >= 0) ballots.splice(index, 1);
+        if (body.p_action === "delete") {
+          const p = people.findIndex((p) => p.id === body.p_participant);
+          if (p >= 0) people.splice(p, 1);
+        }
+        data = null;
+      }
       if (name === "session_action") {
         const ac = body.p_action;
         if (ac === "hide") session.results_visible = false;
@@ -102,8 +124,8 @@ async function fixture(
     } else if (url.pathname.includes("/rest/v1/voting_sessions"))
       data = [session];
     else if (url.pathname.includes("/rest/v1/teams")) data = teams;
-    else if (url.pathname.includes("/rest/v1/participants")) data = [];
-    else if (url.pathname.includes("/rest/v1/votes")) data = [];
+    else if (url.pathname.includes("/rest/v1/participants")) data = people;
+    else if (url.pathname.includes("/rest/v1/votes")) data = ballots;
     else if (url.pathname.includes("/auth/v1/"))
       data = {
         user,
@@ -331,4 +353,219 @@ test("administrator password login opens protected dashboard and navigation", as
     page.getByRole("heading", { name: "Workspace settings" }),
   ).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+const pendingPerson = {
+  id: "50000000-0000-4000-8000-000000000001",
+  session_id: sid,
+  full_name: "Sam Example",
+  team_id: a,
+  created_at: "2026-10-27T00:00:00Z",
+};
+const votedPerson = {
+  id: "50000000-0000-4000-8000-000000000002",
+  session_id: sid,
+  full_name: "Alex Johnson",
+  team_id: b,
+  created_at: "2026-10-27T00:00:00Z",
+};
+const castBallot = {
+  id: "60000000-0000-4000-8000-000000000001",
+  session_id: sid,
+  participant_id: votedPerson.id,
+  voted_team_id: a,
+};
+
+async function expectCentered(page) {
+  const box = await page.getByRole("dialog").boundingBox();
+  const viewport = page.viewportSize();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThan(3);
+  expect(Math.abs(box.y + box.height / 2 - viewport.height / 2)).toBeLessThan(
+    3,
+  );
+}
+
+test("mobile participant cards revoke a vote and then allow registration deletion", async ({
+  page,
+}) => {
+  const { calls, errors } = await fixture(page, {
+    admin: true,
+    codes: true,
+    people: [{ ...pendingPerson }, { ...votedPerson }],
+    ballots: [{ ...castBallot }],
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin/participants");
+  await expect(
+    page.getByRole("button", { name: "Delete Alex Johnson", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Revoke vote for Alex Johnson" })
+    .click();
+  await expectCentered(page);
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "mobile-revoke.png"),
+  });
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(calls.filter((c) => c.name === "manage_participant")).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "Revoke vote for Alex Johnson" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Revoke vote", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const row = page.getByRole("row").filter({ hasText: "Alex Johnson" });
+  await expect(row.getByText("AWAITING VOTE", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Revoke vote for Alex Johnson" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Delete Alex Johnson", exact: true })
+    .click();
+  await expectCentered(page);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Delete participant", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("row").filter({ hasText: "Alex Johnson" }),
+  ).toHaveCount(0);
+  expect(
+    calls
+      .filter((c) => c.name === "manage_participant")
+      .map((c) => c.body.p_action),
+  ).toEqual(["revoke", "delete"]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "mobile-participants.png"),
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
+test("small mobile register and code dialogs are centered and keep keyboard focus inside", async ({
+  page,
+}) => {
+  await fixture(page, { admin: true, codes: true });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/admin/participants");
+  await page
+    .getByRole("button", { name: "Register participant", exact: true })
+    .click();
+  await expectCentered(page);
+  await page.getByLabel("Full name").fill("Sam Example");
+  await page.getByLabel("Registered team").selectOption(a);
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "mobile-register.png"),
+  });
+  await page
+    .getByRole("button", { name: "Create secure code", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Participant code created" }),
+  ).toBeVisible();
+  await expectCentered(page);
+  await page.getByRole("button", { name: "Done", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  expect(
+    await page.evaluate(() =>
+      document.querySelector("dialog").contains(document.activeElement),
+    ),
+  ).toBeTruthy();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("participant action errors stay in the centered dialog without changing the row", async ({
+  page,
+}) => {
+  await fixture(page, {
+    admin: true,
+    codes: true,
+    people: [{ ...votedPerson }],
+    ballots: [{ ...castBallot }],
+    managementError: "Participant records are locked for completed sessions",
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin/participants");
+  await page
+    .getByRole("button", { name: "Revoke vote for Alex Johnson" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Revoke vote", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "locked for completed sessions",
+  );
+  await expectCentered(page);
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ hasText: "Alex Johnson" })
+      .getByText("VOTED", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+});
+
+test("completed sessions disable register, revoke and delete controls", async ({
+  page,
+}) => {
+  await fixture(page, {
+    admin: true,
+    codes: true,
+    status: "STOPPED",
+    people: [{ ...pendingPerson }, { ...votedPerson }],
+    ballots: [{ ...castBallot }],
+  });
+  await page.goto("/admin/participants");
+  await expect(
+    page.getByRole("button", { name: "Register participant", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Revoke vote for Alex Johnson" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Delete Sam Example", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(
+      "This session is complete. Participant records and final results are locked.",
+    ),
+  ).toBeVisible();
+});
+
+test("desktop participant management keeps actions visible and filters voting status", async ({
+  page,
+}) => {
+  await fixture(page, {
+    admin: true,
+    codes: true,
+    people: [{ ...pendingPerson }, { ...votedPerson }],
+    ballots: [{ ...castBallot }],
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/admin/participants");
+  await page.getByLabel("Filter voting status").selectOption("voted");
+  await expect(
+    page.getByRole("row").filter({ hasText: "Sam Example" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Revoke vote for Alex Johnson" })
+    .click();
+  await expectCentered(page);
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "desktop-revoke.png"),
+  });
 });

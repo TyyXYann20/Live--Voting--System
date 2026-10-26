@@ -1654,6 +1654,9 @@ tr:last-child td {
   color: #ffd1d9;
 }
 dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   background: #142034;
   border: 1px solid #35455d;
   border-radius: 15px;
@@ -1661,6 +1664,9 @@ dialog {
   padding: 25px;
   width: min(500px, calc(100vw - 30px));
   max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 30px 100px #0007;
 }
 dialog.wide {
@@ -1679,6 +1685,91 @@ dialog::backdrop {
 }
 .modal-header h2 {
   font-size: 22px;
+  overflow-wrap: anywhere;
+}
+.modal-header > button {
+  flex-shrink: 0;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 25px;
+}
+.modal-actions > button {
+  min-height: 44px;
+}
+.participant-notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--muted);
+  margin: -6px 0 24px;
+}
+.participant-notice > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--lime);
+}
+.participant-notice p {
+  font-size: 12px;
+  max-width: 750px;
+}
+.participant-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.participant-actions {
+  display: flex;
+  gap: 6px;
+}
+.participant-actions button {
+  min-height: 40px;
+  font-size: 11px;
+  padding: 8px 11px;
+}
+.delete-button {
+  color: #ffacb8;
+  border: 1px solid #ff829330;
+  background: #ff829308;
+}
+.delete-button:hover {
+  background: #ff829315;
+}
+.participant-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #0c1728;
+  border: 1px solid var(--border);
+}
+.participant-summary > div {
+  min-width: 0;
+}
+.participant-summary b {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.participant-summary small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.participant-summary .avatar {
+  flex-shrink: 0;
+}
+.action-description {
+  font-size: 13px;
+  color: #c3cfe1;
+  margin: 20px 0 12px;
+}
+.code-done {
+  margin-top: 10px;
 }
 dialog > p {
   margin: 15px 0;
@@ -1866,6 +1957,96 @@ dialog > .primary {
   }
 }
 @media (max-width: 640px) {
+  dialog {
+    padding: 21px;
+  }
+  .modal-header h2 {
+    font-size: 21px;
+  }
+  .modal-actions > button {
+    flex: 1;
+    padding: 11px 10px;
+    white-space: normal;
+  }
+  .participant-notice p {
+    font-size: 11px;
+  }
+  .participant-table {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+  .participant-table table,
+  .participant-table tbody {
+    display: block;
+    white-space: normal;
+  }
+  .participant-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .participant-table tr {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+  .participant-table td,
+  .participant-table tr:last-child td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border: 0;
+    text-align: right;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .participant-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11px;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .participant-table td:first-child {
+    display: block;
+    text-align: left;
+    padding: 0 0 15px;
+    margin-bottom: 7px;
+    border-bottom: 1px solid var(--border);
+  }
+  .participant-table td:first-child::before {
+    display: none;
+  }
+  .participant-table td:first-child b {
+    display: block;
+    font-size: 16px;
+  }
+  .participant-table td:last-child {
+    display: block;
+    padding: 15px 0 0;
+  }
+  .participant-table td:last-child::before {
+    display: none;
+  }
+  .participant-actions {
+    gap: 10px;
+  }
+  .participant-actions button {
+    flex: 1;
+    min-height: 44px;
+  }
   h1 {
     font-size: 28px;
   }

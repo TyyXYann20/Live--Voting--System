@@ -14,6 +14,8 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL: "https://pulse-test.supabase.co",
       VITE_SUPABASE_ANON_KEY: "test-only-public-key",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "test-only-public-key",
+      VITE_HCAPTCHA_SITE_KEY: "",
       VITE_SITE_URL: "http://127.0.0.1:5173",
     },
   },

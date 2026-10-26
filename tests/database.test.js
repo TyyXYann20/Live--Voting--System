@@ -18,6 +18,15 @@ test("PostgreSQL integration: RLS, role boundaries, voting invariants, stop snap
   await db.exec(
     sql.replace(/alter publication supabase_realtime add table[^;]+;/, ""),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../supabase/migrations/202610270001_participant_management.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   await db.query(
     `insert into public.profiles(id,full_name,role) values($1,'Admin','admin')`,
     [admin],
@@ -296,6 +305,284 @@ test("PostgreSQL integration: RLS, role boundaries, voting invariants, stop snap
         [burst],
       );
       assert.equal(rows.rows[0].total, 1);
+    },
+  );
+  await identity(admin);
+  const managed = await rpc("save_session", [
+    null,
+    "Managed session",
+    "",
+    null,
+    null,
+    true,
+  ]);
+  const ma = await rpc("save_team", [
+    null,
+    managed,
+    "Managed A",
+    "#ffffff",
+    false,
+  ]);
+  const mb = await rpc("save_team", [
+    null,
+    managed,
+    "Managed B",
+    "#123456",
+    false,
+  ]);
+  const unused = await rpc("issue_participant", [
+    managed,
+    "Unused participant",
+    ma,
+  ]);
+  const mp = await rpc("issue_participant", [
+    managed,
+    "Managed participant",
+    ma,
+  ]);
+  await identity(user);
+  await t.test(
+    "only admins can manage participants or write the audit log",
+    async () => {
+      await rejects(
+        () => rpc("manage_participant", [managed, unused.id, "delete"]),
+        /Administrator/,
+      );
+      await rejects(
+        () => db.query("delete from participants where id=$1", [unused.id]),
+        /permission denied/,
+      );
+      await rejects(
+        () => db.exec("insert into participant_events default values"),
+        /permission denied/,
+      );
+      assert.equal(
+        (await db.query("select * from participant_events")).rows.length,
+        0,
+      );
+    },
+  );
+  await identity(admin);
+  await t.test(
+    "delete only removes unused registrations in the selected session",
+    async () => {
+      await rejects(
+        () => rpc("manage_participant", [managed, unused.id, "revoke"]),
+        /no vote/,
+      );
+      await rejects(
+        () => rpc("manage_participant", [burst, unused.id, "delete"]),
+        /not found/,
+      );
+      await rejects(
+        () => rpc("manage_participant", [managed, unused.id, "invalid"]),
+        /Invalid participant action/,
+      );
+      await rpc("manage_participant", [managed, unused.id, "delete"]);
+      assert.equal(
+        (await db.query("select * from participants where id=$1", [unused.id]))
+          .rows.length,
+        0,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select * from participant_events where participant_id=$1 and action='delete'",
+            [unused.id],
+          )
+        ).rows.length,
+        1,
+      );
+      await identity(user);
+      await rejects(
+        () => rpc("resolve_participant", [managed, unused.code]),
+        /Invalid participant code/,
+      );
+    },
+  );
+  await identity(admin);
+  await rpc("session_action", [managed, "start"]);
+  await identity(user);
+  const firstReceipt = await rpc("submit_vote", [
+    managed,
+    "Managed participant",
+    ma,
+    mb,
+    mp.code,
+  ]);
+  await identity(admin);
+  await t.test(
+    "revoke atomically deletes the ballot, updates live counts and preserves an admin audit",
+    async () => {
+      await rejects(
+        () => rpc("manage_participant", [managed, mp.id, "delete"]),
+        /Revoke the submitted vote/,
+      );
+      const signal = (
+        await db.query("select nonce from result_signals where session_id=$1", [
+          managed,
+        ])
+      ).rows[0].nonce;
+      await rpc("manage_participant", [managed, mp.id, "revoke"]);
+      assert.equal(
+        (await db.query("select * from votes where participant_id=$1", [mp.id]))
+          .rows.length,
+        0,
+      );
+      assert.equal(
+        (await rpc("get_results", [managed])).teams.find((t) => t.id === mb)
+          .votes,
+        0,
+      );
+      assert.notEqual(
+        (
+          await db.query(
+            "select nonce from result_signals where session_id=$1",
+            [managed],
+          )
+        ).rows[0].nonce,
+        signal,
+      );
+      const audit = (
+        await db.query(
+          "select * from participant_events where participant_id=$1",
+          [mp.id],
+        )
+      ).rows[0];
+      assert.equal(audit.action, "revoke");
+      assert.equal(audit.actor_id, admin);
+      assert.equal(audit.previous_vote.voting_token, firstReceipt);
+      assert.equal(
+        (
+          await db.query("select auth_user_id from participants where id=$1", [
+            mp.id,
+          ])
+        ).rows[0].auth_user_id,
+        user,
+      );
+      await rejects(
+        () => rpc("manage_participant", [managed, mp.id, "revoke"]),
+        /no vote/,
+      );
+    },
+  );
+  await identity(other);
+  await t.test(
+    "a revoked secure vote keeps the original identity and team binding",
+    async () => {
+      await rejects(
+        () => rpc("submit_vote", [managed, "Other", ma, mb, mp.code]),
+        /already used/,
+      );
+      await identity(user);
+      assert.equal(
+        (await rpc("resolve_participant", [managed, mp.code])).has_voted,
+        false,
+      );
+      await rejects(
+        () =>
+          rpc("submit_vote", [managed, "Managed participant", ma, ma, mp.code]),
+        /own team/,
+      );
+      await rejects(
+        () =>
+          rpc("submit_vote", [managed, "Managed participant", mb, ma, mp.code]),
+        /Registered team/,
+      );
+      const replacement = await rpc("submit_vote", [
+        managed,
+        "Managed participant",
+        ma,
+        mb,
+        mp.code,
+      ]);
+      assert.notEqual(replacement, firstReceipt);
+      await rejects(
+        () =>
+          rpc("submit_vote", [managed, "Managed participant", ma, mb, mp.code]),
+        /already been submitted/,
+      );
+    },
+  );
+  await identity(admin);
+  await rpc("session_action", [managed, "stop"]);
+  await t.test(
+    "completed sessions reject revoke/delete and preserve their final snapshot",
+    async () => {
+      await rejects(
+        () => rpc("manage_participant", [managed, mp.id, "revoke"]),
+        /locked/,
+      );
+      await rejects(
+        () => rpc("manage_participant", [managed, mp.id, "delete"]),
+        /locked/,
+      );
+      assert.equal(
+        (await rpc("get_results", [managed])).teams.find((t) => t.id === mb)
+          .votes,
+        1,
+      );
+      await rpc("session_action", [managed, "archive"]);
+      await rejects(
+        () => rpc("manage_participant", [managed, mp.id, "revoke"]),
+        /locked/,
+      );
+    },
+  );
+  await t.test(
+    "open registration can vote again after revocation without creating duplicate participants",
+    async () => {
+      const person = (
+        await db.query(
+          "select * from participants where session_id=$1 and auth_user_id=$2",
+          [open, user],
+        )
+      ).rows[0];
+      await rpc("manage_participant", [open, person.id, "revoke"]);
+      await identity(user);
+      await rejects(
+        () => rpc("submit_vote", [open, "Different name", ob, oa, null]),
+        /Registered team/,
+      );
+      await rpc("submit_vote", [open, "User", oa, ob, null]);
+      await rejects(
+        () => rpc("submit_vote", [open, "User", oa, ob, null]),
+        /already been submitted/,
+      );
+      await identity(admin);
+      assert.equal(
+        (
+          await db.query("select * from participants where session_id=$1", [
+            open,
+          ])
+        ).rows.length,
+        1,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select participant_id from votes where session_id=$1",
+            [open],
+          )
+        ).rows[0].participant_id,
+        person.id,
+      );
+      await rpc("manage_participant", [open, person.id, "revoke"]);
+      await rpc("manage_participant", [open, person.id, "delete"]);
+      assert.equal(
+        (await db.query("select * from participants where id=$1", [person.id]))
+          .rows.length,
+        0,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select * from participant_events where participant_id=$1",
+            [person.id],
+          )
+        ).rows.length,
+        3,
+      );
     },
   );
   await db.close();

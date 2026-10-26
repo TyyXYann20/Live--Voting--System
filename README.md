@@ -1,4 +1,4 @@
-# Pulse — Company Live Team Voting
+# Coding 12PM — Company Live Team Voting
 
 A React + Vite JavaScript application with independent participant and administrator interfaces, PostgreSQL-enforced voting, and a projector that keeps its QR code beside live results. No server, paid API, Firebase, or Sheets is required. **Hosted Supabase and Vercel are not configured or verified by this repository.**
 
@@ -7,6 +7,7 @@ A React + Vite JavaScript application with independent participant and administr
 - Mobile `/vote` session picker and `/vote/:sessionId` voting with confirmation and a unique receipt.
 - Supabase Auth administrator login and role-checked routes: dashboard, sessions, teams, participants, results, history, settings.
 - Dynamic sessions, teams, colors, participant registration, one-time secure code issuance, start/pause/resume/stop/archive.
+- Participant management: revoke a submitted vote to allow voting again, delete unused registrations, mobile participant cards, and centered confirmation/registration dialogs. Every revoke/delete is logged privately for administrators.
 - Secure codes enabled by default; codes identify both participant and registered team. Only SHA-256 hashes of 244-bit random codes are stored.
 - Atomic voting RPC: session lock, unique participant identity, unique vote/token, team membership checks, own-team prohibition, and time-window checks. No client role or count is trusted.
 - Realtime invalidation using safe session metadata and signals, plus ten-second reconciliation polling, reconnect refresh, and focus/online refresh.
@@ -40,7 +41,7 @@ All `VITE_` values are public and bundled at build time. **Never put a service r
 ## Supabase setup
 
 1. Create a project at [Supabase](https://supabase.com/dashboard). Keep the database password private.
-2. In SQL Editor, run the entire file `supabase/migrations/202610260001_voting.sql` **once**. It expects Supabase's `auth` schema, `anon`/`authenticated` roles, and existing `supabase_realtime` publication. Alternatively use the CLI:
+2. In SQL Editor, run `supabase/migrations/202610260001_voting.sql`, then `supabase/migrations/202610270001_participant_management.sql`, each **once, in that order**. The first migration expects Supabase's `auth` schema, `anon`/`authenticated` roles, and existing `supabase_realtime` publication. **If the app is already installed, run only the new `202610270001_participant_management.sql` upgrade. Do not rerun the original migration or bootstrap script.** Alternatively use the CLI:
 
    ```powershell
    npx supabase login
@@ -58,6 +59,18 @@ All `VITE_` values are public and bundled at build time. **Never put a service r
 9. Sign in at `/admin/login`, create a session, add at least two teams, register participants if codes are required, and privately distribute each one-time code. Retain codes securely when generated; raw codes cannot be recovered later.
 
 No Edge Function is necessary: database RPCs perform all privileged operations with a fixed empty search path, explicit object qualification, explicit execute grants, and administrator checks.
+
+## Revoke votes and delete registrations
+
+After applying the participant-management upgrade, open **Admin → Participants** and select your session.
+
+- **Revoke vote:** available for a participant who has voted before the session is stopped or archived. Confirm in the popup to physically remove the ballot from `votes`, refresh live results, and mark the participant as awaiting a vote. Their registration, team, and authenticated identity stay intact. The original ballot is retained in the private, admin-only `participant_events` audit table, together with the administrator and action time.
+- **Vote again:** ask the participant to refresh their voting page in the same browser. Secure-code participants reuse their original code; open-registration participants select their original team. One replacement vote is allowed, with the usual own-team and duplicate-vote checks. A paused session must resume before accepting the replacement.
+- **Delete:** permanently removes an unused participant registration and its code. If someone has voted, revoke the vote first. Deleting a secure registration means they need a new registration/code to participate again. This manages event participants, not Supabase Auth accounts or administrator accounts.
+- **Completed sessions:** all revoke/delete/register controls are locked after Stop or Archive. Saved final results cannot be rewritten.
+- **Open registration:** people are registered automatically at vote submission. Manual code registration is available only in sessions configured to require codes. The page explains why the registration button is disabled for open sessions.
+
+All operations are enforced by `manage_participant` with administrator verification, session/participant locks, and private audit writes in one transaction. Participants cannot call it to reset their own votes. Do not add `participant_events` to Realtime publications.
 
 ## Security model and event operation
 

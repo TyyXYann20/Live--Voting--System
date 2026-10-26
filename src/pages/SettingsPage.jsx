@@ -66,9 +66,10 @@ export default function SettingsPage() {
           </div>
         </div>
         <p className="muted">
-          Votes are immutable. Team changes lock when voting starts. Stopping
-          saves a final snapshot and hides results until you manually reveal
-          them.
+          Participants cannot edit their ballots. Administrators can revoke a
+          vote before a session ends to let that person vote again.
+          Completed-session results are locked. Stopping saves a final snapshot
+          and hides results until you manually reveal them.
         </p>
         <p className="muted">
           Anonymous sign-in CAPTCHA is{" "}

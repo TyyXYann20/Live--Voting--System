@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { Activity, X, AlertCircle, Inbox, LoaderCircle } from "lucide-react";
 const ToastContext = createContext(() => {});
 export function ToastProvider({ children }) {
@@ -73,8 +80,15 @@ export function Empty({ title = "Nothing here yet", children }) {
     </div>
   );
 }
-export function Modal({ title, children, onClose, wide = false }) {
+export function Modal({
+  title,
+  children,
+  onClose,
+  wide = false,
+  busy = false,
+}) {
   const ref = useRef();
+  const titleId = useId();
   useEffect(() => {
     const el = ref.current;
     el.showModal();
@@ -83,15 +97,50 @@ export function Modal({ title, children, onClose, wide = false }) {
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
+      aria-busy={busy}
       className={wide ? "wide" : ""}
-      onCancel={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!busy) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        const controls = [
+          ...e.currentTarget.querySelectorAll(
+            'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ].filter((el) => el.getClientRects().length);
+        const first = controls[0],
+          last = controls.at(-1);
+        if (!first) {
+          e.preventDefault();
+          return;
+        }
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }}
       onClick={(e) => {
-        if (e.target === ref.current) onClose();
+        if (e.target === ref.current && !busy) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (
+            e.clientX < rect.left ||
+            e.clientX > rect.right ||
+            e.clientY < rect.top ||
+            e.clientY > rect.bottom
+          )
+            onClose();
+        }
       }}
     >
       <div className="modal-header">
-        <h2>{title}</h2>
-        <button aria-label="Close dialog" onClick={onClose}>
+        <h2 id={titleId}>{title}</h2>
+        <button aria-label="Close dialog" onClick={onClose} disabled={busy}>
           <X />
         </button>
       </div>

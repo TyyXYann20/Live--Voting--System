@@ -337,7 +337,8 @@ function VoteSession({ sessionId }) {
                 Review my vote
               </button>
               <p className="vote-disclaimer">
-                Your vote is final and cannot be changed.
+                You cannot change your vote yourself. Contact your organizer if
+                you need a reset.
               </p>
             </form>
           )}
@@ -353,7 +354,8 @@ function VoteSession({ sessionId }) {
             <b>{data.teams.find((t) => t.id === target)?.name}</b> in {s.name}.
           </p>
           <p className="muted">
-            Your vote is private. Once submitted, it cannot be changed.
+            Your vote is private. After submitting, only your organizer can
+            reset it.
           </p>
           <button className="primary full" disabled={busy} onClick={submit}>
             {busy ? "Submitting…" : "Confirm my vote"}
