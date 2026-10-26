@@ -24,6 +24,7 @@ async function fixture(
     teamList = teams,
     scores = [72, 58, 46],
     visibilityError = null,
+    bulkError = null,
   } = {},
 ) {
   const errors = [];
@@ -82,6 +83,24 @@ async function fixture(
       const name = url.pathname.split("/").pop();
       calls.push({ name, body });
       if (name === "is_admin") data = admin;
+      if (name === "create_teams_bulk") {
+        if (bulkError) {
+          await route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ message: bulkError, code: "P0001" }),
+          });
+          return;
+        }
+        data = body.p_teams.length;
+        for (const team of body.p_teams)
+          teamList.push({
+            ...team,
+            id: crypto.randomUUID(),
+            session_id: body.p_session,
+            is_active: true,
+          });
+      }
       if (name === "get_results")
         data = {
           hidden: !admin && !session.results_visible,
@@ -735,4 +754,112 @@ test("unsupported fullscreen still reveals results in normal projector mode", as
   );
   await expect(page.locator(".results-chart")).toBeVisible();
   await expect(page.locator(".qr-image canvas")).toBeVisible();
+});
+
+test("mobile paste teams previews automatic colors, skips duplicates and creates one batch", async ({
+  page,
+}) => {
+  const { calls, errors } = await fixture(page, {
+    admin: true,
+    status: "DRAFT",
+    teamList: [...teams],
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin/teams");
+  await page.getByRole("button", { name: "Add team", exact: true }).click();
+  await page.getByRole("button", { name: "Paste teams", exact: true }).click();
+  await page.getByLabel("Team names").fill("A1,\nA2,\nB1,\na1,Orion,");
+  await expect(
+    page.getByRole("list", { name: "Team preview" }).getByRole("listitem"),
+  ).toHaveCount(3);
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
+    "1 repeated name skipped. 1 existing team skipped.",
+  );
+  await expectCentered(page);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "mobile-bulk-teams.png"),
+  });
+  await page
+    .getByRole("button", { name: "Create 3 teams", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  for (const name of ["A1", "A2", "B1"])
+    await expect(
+      page.getByRole("heading", { name, exact: true }),
+    ).toBeVisible();
+  const batchCalls = calls.filter((c) => c.name === "create_teams_bulk");
+  expect(batchCalls).toHaveLength(1);
+  expect(batchCalls[0].body.p_teams.map((t) => t.name)).toEqual([
+    "A1",
+    "A2",
+    "B1",
+  ]);
+  const colors = batchCalls[0].body.p_teams.map((t) => t.color);
+  expect(new Set(colors).size).toBe(3);
+  expect(colors.every((c) => /^#[0-9a-f]{6}$/.test(c))).toBeTruthy();
+  expect(colors.some((c) => teams.some((t) => t.color === c))).toBeFalsy();
+  expect(errors).toEqual([]);
+});
+
+test("bulk team validation blocks empty, existing-only, long and oversized input", async ({
+  page,
+}) => {
+  const { calls } = await fixture(page, { admin: true, status: "DRAFT" });
+  await page.goto("/admin/teams");
+  await page.getByRole("button", { name: "Add team", exact: true }).click();
+  await page.getByRole("button", { name: "Paste teams", exact: true }).click();
+  const submit = page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Create .*teams?$/ });
+  await expect(submit).toBeDisabled();
+  await page.getByLabel("Team names").fill("Orion,ORION,");
+  await expect(submit).toBeDisabled();
+  await page.getByLabel("Team names").fill("A1," + "x".repeat(81));
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "exceed 80 characters",
+  );
+  await expect(submit).toBeDisabled();
+  await page
+    .getByLabel("Team names")
+    .fill(Array.from({ length: 101 }, (_, i) => `T${i}`).join(","));
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "at most 100",
+  );
+  await expect(submit).toBeDisabled();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(calls.filter((c) => c.name === "create_teams_bulk")).toHaveLength(0);
+});
+
+test("a bulk save failure keeps the pasted names and colors ready to retry", async ({
+  page,
+}) => {
+  const { calls } = await fixture(page, {
+    admin: true,
+    status: "DRAFT",
+    teamList: [...teams],
+    bulkError: "Teams are locked after voting starts",
+  });
+  await page.goto("/admin/teams");
+  await page.getByRole("button", { name: "Add team", exact: true }).click();
+  await page.getByRole("button", { name: "Paste teams", exact: true }).click();
+  await page.getByLabel("Team names").fill("A1,A2,");
+  await page
+    .getByRole("button", { name: "Create 2 teams", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "locked after voting starts",
+  );
+  await expect(page.getByLabel("Team names")).toHaveValue("A1,A2,");
+  await expect(
+    page.getByRole("list", { name: "Team preview" }).getByRole("listitem"),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "Create 2 teams", exact: true }),
+  ).toBeEnabled();
+  expect(calls.filter((c) => c.name === "create_teams_bulk")).toHaveLength(1);
 });

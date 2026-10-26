@@ -21,6 +21,10 @@ Run against a dedicated Supabase test project and production-like HTTPS build. N
 | Devices                   | Test 390px phone, 768px tablet, laptop and 1920×1080 projector. Keyboard-only controls, dialog focus/Escape, screen-reader labels, and reduced motion remain usable.                                                                                            |
 | Deployment                | Hard refresh every route, verify no console/app errors, run build, confirm no `.env` or service key in Git/build, verify Vercel plan eligibility, CAPTCHA, Supabase capacity and backups.                                                                       |
 
+## Bulk-team upgrade acceptance
+
+Apply only the new `202610270002_bulk_teams.sql` file once to an existing project with the original schema. In a draft session, use **Teams → Add team → Paste teams** and paste `A1, A2, B1,` plus line breaks. Confirm the name/color preview matches the saved teams and that duplicates/existing names are skipped. Test invalid names and more than 100 new teams; neither should save. Use two administrators to create an overlapping batch concurrently: a conflicting batch must create no partial rows. Start voting while another admin has a batch popup open; submission must fail and retain their text. Check non-admin RPC calls are denied and individual team editing still works.
+
 ## Participant management upgrade acceptance
 
 Apply `202610270001_participant_management.sql` once to an existing test project after the original migration. Existing sessions, participants and votes must remain unchanged by applying it.

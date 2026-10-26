@@ -7,6 +7,7 @@ A React + Vite JavaScript application with independent participant and administr
 - Mobile `/vote` session picker and `/vote/:sessionId` voting with confirmation and a unique receipt.
 - Supabase Auth administrator login and role-checked routes: dashboard, sessions, teams, participants, results, history, settings.
 - Dynamic sessions, teams, colors, participant registration, one-time secure code issuance, start/pause/resume/stop/archive.
+- Bulk team creation from pasted comma/newline-separated names, with generated colors, duplicate/existing-name skipping, and an atomic batch save.
 - Participant management: revoke a submitted vote to allow voting again, delete unused registrations, mobile participant cards, and centered confirmation/registration dialogs. Every revoke/delete is logged privately for administrators.
 - Secure codes enabled by default; codes identify both participant and registered team. Only SHA-256 hashes of 244-bit random codes are stored.
 - Atomic voting RPC: session lock, unique participant identity, unique vote/token, team membership checks, own-team prohibition, and time-window checks. No client role or count is trusted.
@@ -41,7 +42,7 @@ All `VITE_` values are public and bundled at build time. **Never put a service r
 ## Supabase setup
 
 1. Create a project at [Supabase](https://supabase.com/dashboard). Keep the database password private.
-2. In SQL Editor, run `supabase/migrations/202610260001_voting.sql`, then `supabase/migrations/202610270001_participant_management.sql`, each **once, in that order**. The first migration expects Supabase's `auth` schema, `anon`/`authenticated` roles, and existing `supabase_realtime` publication. **If the app is already installed, run only the new `202610270001_participant_management.sql` upgrade. Do not rerun the original migration or bootstrap script.** Alternatively use the CLI:
+2. In SQL Editor, run the migrations in filename order, each **once**: `202610260001_voting.sql`, `202610270001_participant_management.sql`, then `202610270002_bulk_teams.sql` (all in `supabase/migrations/`). The first expects Supabase's `auth` schema, `anon`/`authenticated` roles, and existing `supabase_realtime` publication. **For an existing installation, apply only migrations you have not already run. For the bulk-team update, run only `202610270002_bulk_teams.sql`; do not rerun old migrations or the administrator bootstrap script.** Alternatively use the CLI:
 
    ```powershell
    npx supabase login
@@ -59,6 +60,21 @@ All `VITE_` values are public and bundled at build time. **Never put a service r
 9. Sign in at `/admin/login`, create a session, add at least two teams, register participants if codes are required, and privately distribute each one-time code. Retain codes securely when generated; raw codes cannot be recovered later.
 
 No Edge Function is necessary: database RPCs perform all privileged operations with a fixed empty search path, explicit object qualification, explicit execute grants, and administrator checks.
+
+## Paste multiple teams
+
+Open **Teams → Add team → Paste teams** in a draft session. Paste names such as:
+
+```text
+A1,
+A2,
+B1,
+B2,
+```
+
+Commas and new lines both separate names; trailing separators and blank lines are ignored. The preview trims names, skips case-insensitive duplicates and teams already in the selected session, and generates distinct bright hex colors without reusing that session's existing colors. Click **Create N teams** to save the preview. Colors can be changed later through individual team editing.
+
+Each batch accepts up to 100 new names, each 1–80 characters. Oversized batches and long names must be corrected before saving; the preview is not silently imported as a truncated list. The administrator-only `create_teams_bulk` RPC locks the session, validates every item, and creates the entire batch in one transaction. A concurrent conflict, invalid item or started session creates no partial batch and leaves the pasted text ready for review/retry. Team additions stay locked after voting starts. The **Single team** option still supports individual creation and custom colors.
 
 ## Revoke votes and delete registrations
 

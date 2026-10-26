@@ -27,6 +27,15 @@ test("PostgreSQL integration: RLS, role boundaries, voting invariants, stop snap
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../supabase/migrations/202610270002_bulk_teams.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   await db.query(
     `insert into public.profiles(id,full_name,role) values($1,'Admin','admin')`,
     [admin],
@@ -583,6 +592,128 @@ test("PostgreSQL integration: RLS, role boundaries, voting invariants, stop snap
         ).rows.length,
         3,
       );
+    },
+  );
+  await identity(admin);
+  const bulkSession = await rpc("save_session", [
+    null,
+    "Bulk teams",
+    "",
+    null,
+    null,
+    false,
+  ]);
+  const createBulk = (items, session = bulkSession) =>
+    rpc("create_teams_bulk", [session, JSON.stringify(items)]);
+  const bulkRows = () =>
+    db.query("select name,color from teams where session_id=$1 order by name", [
+      bulkSession,
+    ]);
+  await t.test(
+    "bulk team creation saves trimmed names and preview colors in one transaction",
+    async () => {
+      assert.equal(
+        await createBulk([
+          { name: " A1 ", color: "#c3f56b" },
+          { name: "A2", color: "#729bff" },
+          { name: "B1", color: "#9b7bff" },
+        ]),
+        3,
+      );
+      assert.deepEqual((await bulkRows()).rows, [
+        { name: "A1", color: "#c3f56b" },
+        { name: "A2", color: "#729bff" },
+        { name: "B1", color: "#9b7bff" },
+      ]);
+    },
+  );
+  await t.test(
+    "non-admin and anonymous callers cannot bulk-create teams",
+    async () => {
+      await identity(user);
+      await rejects(
+        () => createBulk([{ name: "Unauthorized", color: "#ffffff" }]),
+        /Administrator/,
+      );
+      await identity("", "anon");
+      await rejects(
+        () => createBulk([{ name: "Unauthorized", color: "#ffffff" }]),
+        /permission denied/,
+      );
+      await identity(admin);
+      assert.equal((await bulkRows()).rows.length, 3);
+    },
+  );
+  await t.test(
+    "bulk team validation rejects invalid JSON, sizes, names and colors atomically",
+    async () => {
+      await rejects(() => createBulk(null), /array of teams/);
+      await rejects(() => createBulk({ name: "Wrong type" }), /array of teams/);
+      await rejects(() => createBulk([]), /between 1 and 100/);
+      await rejects(
+        () =>
+          createBulk(
+            Array.from({ length: 101 }, (_, i) => ({
+              name: `T${i}`,
+              color: "#ffffff",
+            })),
+          ),
+        /between 1 and 100/,
+      );
+      for (const invalid of [
+        { name: " ", color: "#ffffff" },
+        { name: "x".repeat(81), color: "#ffffff" },
+        { name: 14, color: "#ffffff" },
+        { color: "#ffffff" },
+        { name: "Bad color", color: "red" },
+        { name: "Bad color" },
+      ]) {
+        await assert.rejects(() =>
+          createBulk([
+            { name: "Do not partially save", color: "#ffffff" },
+            invalid,
+          ]),
+        );
+        assert.equal((await bulkRows()).rows.length, 3);
+      }
+    },
+  );
+  await t.test(
+    "bulk duplicate names are rejected within a batch and against existing teams",
+    async () => {
+      await rejects(
+        () =>
+          createBulk([
+            { name: "New", color: "#ffffff" },
+            { name: " new ", color: "#123456" },
+          ]),
+        /Duplicate team/,
+      );
+      await rejects(
+        () =>
+          createBulk([
+            { name: "New", color: "#ffffff" },
+            { name: " a1 ", color: "#123456" },
+          ]),
+        /already exists/,
+      );
+      assert.equal((await bulkRows()).rows.length, 3);
+    },
+  );
+  await rpc("session_action", [bulkSession, "start"]);
+  await t.test(
+    "bulk additions respect the same post-start team lock as individual edits",
+    async () => {
+      await rejects(
+        () => createBulk([{ name: "Too late", color: "#ffffff" }]),
+        /locked/,
+      );
+      await rpc("session_action", [bulkSession, "pause"]);
+      await rejects(
+        () => createBulk([{ name: "Too late", color: "#ffffff" }]),
+        /locked/,
+      );
+      assert.equal((await bulkRows()).rows.length, 3);
     },
   );
   await db.close();
