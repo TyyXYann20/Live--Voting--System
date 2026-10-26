@@ -27,6 +27,7 @@ import {
   useToast,
 } from "../components/UI";
 import QRCodePanel from "../components/QRCodePanel";
+import ThemeToggle from "../components/ThemeToggle";
 import { ResultsView, WinnerPresentation } from "../components/ResultViews";
 import { rankTeams } from "../utils/results";
 export default function LiveResultsPage({ projector = false }) {
@@ -137,6 +138,7 @@ export default function LiveResultsPage({ projector = false }) {
               <ArrowLeft size={16} /> Workspace
             </Link>
           )}
+          <ThemeToggle />
           {canReveal && (
             <button
               className="secondary"

@@ -21,6 +21,10 @@ Run against a dedicated Supabase test project and production-like HTTPS build. N
 | Devices                   | Test 390px phone, 768px tablet, laptop and 1920×1080 projector. Keyboard-only controls, dialog focus/Escape, screen-reader labels, and reduced motion remain usable.                                                                                            |
 | Deployment                | Hard refresh every route, verify no console/app errors, run build, confirm no `.env` or service key in Git/build, verify Vercel plan eligibility, CAPTCHA, Supabase capacity and backups.                                                                       |
 
+## Theme switching acceptance
+
+Verify **Light mode / Dark mode** on participant, login, admin and projector screens. Dark must be the default for a fresh browser. Light uses blue actions, white cards and a pale-blue background; returning to Dark restores the original design. Reload, navigate, and open a second tab on the same hostname to confirm persistence/synchronization. Confirm input selections and QR canvas remain intact while switching and that no voting/visibility RPC is sent by the theme button. Test private browsing, blocked preference storage, long names, small screens, chart tooltips, Top 3/team dialogs and winner presentation in both modes. If CAPTCHA is enabled, check that its theme updates and a new solution can be submitted. No SQL migration is needed for themes.
+
 ## Bulk-team upgrade acceptance
 
 Apply only the new `202610270002_bulk_teams.sql` file once to an existing project with the original schema. In a draft session, use **Teams → Add team → Paste teams** and paste `A1, A2, B1,` plus line breaks. Confirm the name/color preview matches the saved teams and that duplicates/existing names are skipped. Test invalid names and more than 100 new teams; neither should save. Use two administrators to create an overlapping batch concurrently: a conflicting batch must create no partial rows. Start voting while another admin has a batch popup open; submission must fail and retain their text. Check non-admin RPC calls are denied and individual team editing still works.

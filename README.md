@@ -16,6 +16,7 @@ A React + Vite JavaScript application with independent participant and administr
 - QR enlargement, PNG download, copy link, and a print layout.
 - Stop saves a final snapshot and hides results. Historical sessions retain votes, teams, participants, and snapshots. A stopped session cannot be reopened.
 - Dark navy/lime design, responsive sidebar, reduced-motion behavior, labeled inputs, keyboard focus states, native modal focus trapping, toasts, loading and error states.
+- Optional blue-and-white light mode matching the supplied visual sample. A theme button switches back to the original dark design and remembers the choice in the same browser.
 
 ## Local setup
 
@@ -38,6 +39,14 @@ VITE_HCAPTCHA_SITE_KEY=
 ```
 
 All `VITE_` values are public and bundled at build time. **Never put a service role key, database password, JWT secret, or CAPTCHA secret here.** `.env` is ignored. The publishable/anon key is intentionally public; RLS and RPC authorization secure the data.
+
+## Appearance modes
+
+The original **dark navy/lime** theme remains the default. Click **Light mode** for the sample-inspired **blue-and-white** design, or **Dark mode** to return. The switch is available in the participant header, administrator sidebar/mobile header, login toolbar, and projector header.
+
+The selection is saved per browser and synchronized across open tabs on the same site. It persists through reloads and page navigation, but is not a global event or account setting. Switching preserves form inputs, team colors, votes and result visibility; it does not submit votes or reveal hidden results. If browser preference storage is blocked, switching still works for the current visit. The saved appearance is applied before the app paints to avoid flashing the opposite theme.
+
+Light mode includes pale-blue backgrounds, white surfaces, blue actions, dark chart text and matching forms/dialogs. On desktop projectors it uses the visual sample's title-left/metrics-right composition. Projector vote labels remain visible continuously during live updates. CAPTCHA widgets follow the chosen mode and may require solving again after switching. No SQL migration or environment-variable changes are needed for appearance modes.
 
 ## Supabase setup
 

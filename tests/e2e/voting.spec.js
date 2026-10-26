@@ -863,3 +863,217 @@ test("a bulk save failure keeps the pasted names and colors ready to retry", asy
   ).toBeEnabled();
   expect(calls.filter((c) => c.name === "create_teams_bulk")).toHaveLength(1);
 });
+
+const themeKey = "coding12pm:theme:v1";
+
+test("mobile participant theme switch preserves voting inputs and remembers the chosen mode", async ({
+  page,
+}) => {
+  const { calls, errors } = await fixture(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/vote/${sid}`);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByLabel("Your full name").fill("Alex Johnson");
+  await page.getByLabel("Your team").selectOption(a);
+  await page.getByRole("radio", { name: "Nova" }).check();
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByLabel("Your full name")).toHaveValue("Alex Johnson");
+  await expect(page.getByRole("radio", { name: "Nova" })).toBeChecked();
+  await expect(page.locator(".vote-card")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  await expect(
+    page.locator("header").getByRole("link", { name: /Admin/ }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "light-participant.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Switch to dark mode" }),
+  ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("html")).toHaveCSS(
+    "background-color",
+    "rgb(9, 15, 30)",
+  );
+  expect(calls.filter((c) => c.name === "submit_vote")).toHaveLength(0);
+  expect(errors).toEqual([]);
+});
+
+test("light projector matches blue-and-white theme and keeps live charts and QR while switching", async ({
+  page,
+}) => {
+  const teamList = [
+    ...teams,
+    ...["Apex", "Horizon", "Vertex"].map((name, i) => ({
+      id: `20000000-0000-4000-8000-00000000000${i + 4}`,
+      session_id: sid,
+      name,
+      color: ["#ffb164", "#fc86b7", "#7debd0"][i],
+      is_active: true,
+    })),
+  ];
+  const { scores, calls, errors } = await fixture(page, {
+    admin: true,
+    teamList,
+    scores: [72, 58, 46, 32, 24, 16],
+  });
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.clock.install();
+  await page.goto(`/projector/${sid}`);
+  const qr = await page.locator(".qr-image canvas").elementHandle();
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator(".results-panel")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  await expect(page.locator(".brand")).toHaveCSS("color", "rgb(8, 34, 73)");
+  const tick = page
+    .locator(".results-panel")
+    .getByText("1. Orion", { exact: true });
+  await expect(tick).toHaveCSS("fill", "rgb(38, 73, 105)");
+  for (const team of teamList)
+    await expect(
+      page
+        .locator(".results-panel")
+        .getByText(new RegExp(`\\d+\\. ${team.name}$`)),
+    ).toBeVisible();
+  scores[0]++;
+  await page.clock.fastForward(11000);
+  await expect(
+    page.locator(".stat").filter({ hasText: "Total votes" }).locator("strong"),
+  ).toHaveText("249");
+  await expect(
+    page.locator(".results-panel").getByText("73 (29.3%)", { exact: true }),
+  ).toBeVisible();
+  expect(await qr.evaluate((el) => el.isConnected)).toBeTruthy();
+  const chart = await page.locator(".results-chart").boundingBox();
+  const qrBox = await page.locator(".qr-image canvas").boundingBox();
+  expect(chart.y + chart.height).toBeLessThanOrEqual(900);
+  expect(qrBox.y + qrBox.height).toBeLessThanOrEqual(900);
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "light-projector.png"),
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await expect(page.locator("html")).toHaveCSS(
+    "background-color",
+    "rgb(9, 15, 30)",
+  );
+  expect(await qr.evaluate((el) => el.isConnected)).toBeTruthy();
+  expect(calls.filter((c) => c.name === "session_action")).toHaveLength(0);
+  expect(errors).toEqual([]);
+});
+
+test("saved light mode applies to mobile admin dialogs and preserves their form inputs", async ({
+  page,
+}) => {
+  await fixture(page, { admin: true, status: "DRAFT" });
+  await page.addInitScript(
+    (key) => localStorage.setItem(key, "light"),
+    themeKey,
+  );
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/admin/teams");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(
+    page.getByRole("button", { name: "Switch to dark mode" }),
+  ).toBeVisible();
+  const brandBox = await page.locator(".sidebar .brand").boundingBox();
+  const toggleBox = await page
+    .getByRole("button", { name: "Switch to dark mode" })
+    .boundingBox();
+  expect(brandBox.x + brandBox.width).toBeLessThanOrEqual(toggleBox.x);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.getByRole("button", { name: "Add team", exact: true }).click();
+  await page.getByRole("button", { name: "Paste teams", exact: true }).click();
+  await page.getByLabel("Team names").fill("A1,A2,B1,");
+  await expectCentered(page);
+  await expect(page.getByRole("dialog")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  await expect(page.getByLabel("Team names")).toHaveCSS(
+    "color",
+    "rgb(8, 34, 73)",
+  );
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "light-mobile-dialog.png"),
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("link", { name: "Sessions", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Voting sessions" }),
+  ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
+test("theme choice synchronizes across open tabs without reloading results", async ({
+  page,
+}) => {
+  await fixture(page, { admin: true });
+  await page.goto("/admin/results");
+  const projector = await page.context().newPage();
+  await fixture(projector, { admin: true });
+  await projector.goto(`/projector/${sid}`);
+  await expect(
+    projector.getByText("Total votes", { exact: true }),
+  ).toBeVisible();
+  const qr = await projector.locator(".qr-image canvas").elementHandle();
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await expect(projector.locator("html")).toHaveAttribute(
+    "data-theme",
+    "light",
+  );
+  expect(await qr.evaluate((el) => el.isConnected)).toBeTruthy();
+  await projector.getByRole("button", { name: "Switch to dark mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await projector.close();
+});
+
+test("login theme switch survives invalid preferences and blocked preference writes", async ({
+  page,
+}) => {
+  const { errors } = await fixture(page, { signedIn: false });
+  await page.addInitScript((key) => {
+    localStorage.setItem(key, "invalid");
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new Error("Preference writes blocked");
+      return original.call(this, k, v);
+    };
+  }, themeKey);
+  await page.goto("/admin/login");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByLabel("Email address").fill("admin@example.test");
+  await page.getByLabel("Password").fill("test-only-password");
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByLabel("Email address")).toHaveValue(
+    "admin@example.test",
+  );
+  await expect(page.getByLabel("Password")).toHaveValue("test-only-password");
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "light-login.png"),
+    animations: "disabled",
+  });
+  expect(errors).toEqual([]);
+});

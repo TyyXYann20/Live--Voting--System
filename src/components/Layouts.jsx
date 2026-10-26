@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../hooks/useAuth";
 import { supabase, configured } from "../services/supabase";
 import { Brand, Loading } from "./UI";
+import ThemeToggle from "./ThemeToggle";
 const nav = [
   ["dashboard", "Overview", LayoutDashboard],
   ["sessions", "Sessions", CalendarDays],
@@ -32,6 +33,9 @@ export function AdminLayout() {
         <Link to="/admin/dashboard">
           <Brand />
         </Link>
+        <div className="sidebar-theme">
+          <ThemeToggle />
+        </div>
         <div className="workspace-label">EVENT WORKSPACE</div>
         <nav>
           {nav.map(([path, label, Icon]) => (
@@ -70,6 +74,7 @@ export function PublicLayout() {
         <Link to="/vote">
           <Brand />
         </Link>
+        <ThemeToggle />
       </header>
       <main>
         <Outlet />

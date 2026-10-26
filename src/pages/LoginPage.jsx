@@ -4,6 +4,7 @@ import { LockKeyhole, ArrowRight } from "lucide-react";
 import { supabase, configured } from "../services/supabase";
 import { useAuth } from "../hooks/useAuth";
 import { Brand, Field, ErrorBox } from "../components/UI";
+import ThemeToggle from "../components/ThemeToggle";
 export default function LoginPage() {
   const auth = useAuth();
   const [error, setError] = useState("");
@@ -56,9 +57,12 @@ export default function LoginPage() {
         <small>COMPANY LIVE TEAM VOTING</small>
       </div>
       <div className="login-form">
-        <Link className="back-link" to="/vote">
-          ← Back to voting
-        </Link>
+        <div className="login-toolbar">
+          <Link className="back-link" to="/vote">
+            ← Back to voting
+          </Link>
+          <ThemeToggle />
+        </div>
         <div className="login-inner">
           <span className="lock-icon">
             <LockKeyhole />

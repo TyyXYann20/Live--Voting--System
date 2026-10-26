@@ -11,15 +11,20 @@ import {
 } from "recharts";
 import { Trophy, ArrowLeft } from "lucide-react";
 import { Modal, Empty } from "./UI";
+import { useTheme } from "../hooks/useTheme";
 export function ResultsChart({ teams, presentation = false, onSelect }) {
+  const { theme } = useTheme();
+  const lightPresentation = presentation && theme === "light";
+  const minimumHeight = Math.max(
+    presentation ? 250 : 220,
+    teams.length * (presentation ? 46 : 53),
+  );
   return (
     <div className="results-chart">
       <ResponsiveContainer
         width="100%"
-        height={Math.max(
-          presentation ? 250 : 220,
-          teams.length * (presentation ? 46 : 53),
-        )}
+        height={lightPresentation ? "100%" : minimumHeight}
+        minHeight={lightPresentation ? minimumHeight : undefined}
       >
         <BarChart
           data={teams.map((t) => ({
@@ -35,24 +40,31 @@ export function ResultsChart({ teams, presentation = false, onSelect }) {
             type="category"
             dataKey="chartName"
             width={presentation ? 135 : 110}
-            tick={{ fill: "#c6cfdf", fontSize: presentation ? 15 : 13 }}
+            tick={{
+              fill: "var(--chart-label)",
+              fontSize: lightPresentation ? 18 : presentation ? 15 : 13,
+            }}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip
-            cursor={{ fill: "#ffffff06" }}
+            cursor={{ fill: "var(--chart-hover)" }}
             contentStyle={{
-              background: "#172338",
-              border: "1px solid #30405a",
+              background: "var(--chart-tooltip)",
+              border: "1px solid var(--border)",
               borderRadius: 8,
-              color: "#fff",
+              color: "var(--text)",
             }}
           />
           <Bar
             dataKey="votes"
             name="Votes"
             radius={[0, 5, 5, 0]}
-            maxBarSize={25}
+            maxBarSize={lightPresentation ? 36 : 25}
+            isAnimationActive={!presentation}
+            background={
+              presentation ? { fill: "var(--chart-track)", radius: 5 } : false
+            }
             onClick={(entry) => onSelect?.(entry.payload)}
             style={onSelect ? { cursor: "pointer" } : undefined}
           >
@@ -63,8 +75,8 @@ export function ResultsChart({ teams, presentation = false, onSelect }) {
               <LabelList
                 dataKey="chartLabel"
                 position="right"
-                fill="#e9eef8"
-                fontSize={14}
+                fill="var(--text)"
+                fontSize={lightPresentation ? 16 : 14}
               />
             )}
           </Bar>

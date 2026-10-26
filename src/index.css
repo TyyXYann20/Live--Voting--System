@@ -5,8 +5,8 @@
 }
 :root {
   font-family: Inter, "Segoe UI", sans-serif;
-  color: #f3f6fc;
-  background: #090f1e;
+  color: var(--text);
+  background: var(--bg);
   font-synthesis: none;
   font-weight: 400;
   line-height: 1.5;
@@ -16,6 +16,11 @@
   --border: #253249;
   --muted: #9baac2;
   --lime: #c3f56b;
+  --text: #f3f6fc;
+  --chart-label: #c6cfdf;
+  --chart-tooltip: #172338;
+  --chart-hover: #ffffff06;
+  --chart-track: transparent;
 }
 * {
   box-sizing: border-box;

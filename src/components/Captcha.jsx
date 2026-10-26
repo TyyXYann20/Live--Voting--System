@@ -1,16 +1,19 @@
 import { useEffect, useRef } from "react";
+import { useTheme } from "../hooks/useTheme";
 export default function Captcha({ onToken }) {
   const ref = useRef();
   const key = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
+  const { theme } = useTheme();
   useEffect(() => {
     if (!key) return;
+    onToken("");
     let id,
       alive = true;
     const render = () => {
       if (alive && ref.current && window.hcaptcha)
         id = window.hcaptcha.render(ref.current, {
           sitekey: key,
-          theme: "dark",
+          theme,
           callback: onToken,
           "expired-callback": () => onToken(""),
         });
@@ -32,6 +35,6 @@ export default function Captcha({ onToken }) {
       script?.removeEventListener("load", render);
       if (id !== undefined) window.hcaptcha?.remove(id);
     };
-  }, [key, onToken]);
+  }, [key, onToken, theme]);
   return key ? <div className="captcha" ref={ref} /> : null;
 }
