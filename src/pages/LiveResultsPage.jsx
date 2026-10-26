@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import {
   ChartNoAxesColumnIncreasing,
@@ -11,6 +11,7 @@ import {
   Play,
   Square,
   Maximize,
+  Minimize,
   ArrowLeft,
 } from "lucide-react";
 import { select, rpc } from "../services/supabase";
@@ -35,8 +36,16 @@ export default function LiveResultsPage({ projector = false }) {
   const [view, setView] = useState("all");
   const [winner, setWinner] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fullscreen, setFullscreen] = useState(
+    Boolean(document.fullscreenElement),
+  );
   const auth = useAuth();
   const toast = useToast();
+  useEffect(() => {
+    const sync = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
   const { data, loading, error, refresh, connection, updated } =
     useLiveData(async () => {
       const sessions = await select("voting_sessions", (q) =>
@@ -76,11 +85,47 @@ export default function LiveResultsPage({ projector = false }) {
           ? "Voting stopped. Results are hidden."
           : "Session updated",
       );
+      return true;
     } catch (e) {
       toast(e.message, true);
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+  const canReveal =
+    auth.admin && session && !session.archived_at && session.status !== "DRAFT";
+  const revealOnFullscreen = canReveal && hidden;
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        toast("Could not exit fullscreen. Press Escape to exit.", true);
+      }
+      return;
+    }
+    // Browser fullscreen requires the original click's user activation. Start it
+    // before awaiting the authorized reveal RPC, which still enforces permissions.
+    setView("all");
+    window.scrollTo({ top: 0, behavior: "instant" });
+    let entering;
+    try {
+      entering = document.documentElement.requestFullscreen
+        ? document.documentElement.requestFullscreen().then(
+            () => true,
+            () => false,
+          )
+        : Promise.resolve(false);
+    } catch {
+      entering = Promise.resolve(false);
+    }
+    if (revealOnFullscreen) await action("show");
+    if (!(await entering))
+      toast(
+        "Fullscreen is unavailable in this browser. You can still use projector mode.",
+        true,
+      );
   }
   return (
     <div className={projector ? "projector" : ""}>
@@ -92,16 +137,37 @@ export default function LiveResultsPage({ projector = false }) {
               <ArrowLeft size={16} /> Workspace
             </Link>
           )}
+          {canReveal && (
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => action(session.results_visible ? "hide" : "show")}
+            >
+              {session.results_visible ? (
+                <EyeOff size={17} />
+              ) : (
+                <Eye size={17} />
+              )}
+              {session.results_visible
+                ? "Hide results"
+                : session.status === "STOPPED"
+                  ? "Reveal results"
+                  : "Show results"}
+            </button>
+          )}
           <button
-            onClick={() =>
-              document.fullscreenElement
-                ? document.exitFullscreen()
-                : document.documentElement
-                    .requestFullscreen()
-                    .catch(() => toast("Fullscreen is unavailable", true))
-            }
+            className="secondary"
+            disabled={busy || auth.loading}
+            onClick={toggleFullscreen}
           >
-            <Maximize size={18} /> Full screen
+            {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            {fullscreen
+              ? "Exit full screen"
+              : revealOnFullscreen
+                ? session.status === "STOPPED"
+                  ? "Reveal results & full screen"
+                  : "Show results & full screen"
+                : "Full screen"}
           </button>
         </header>
       )}
@@ -195,6 +261,12 @@ export default function LiveResultsPage({ projector = false }) {
                   <EyeOff size={48} />
                   <h2>The big reveal is coming.</h2>
                   <p>Scan the QR code and make your voice count.</p>
+                  {projector && auth.admin && (
+                    <p className="hidden-admin-help">
+                      Use Show results or the full-screen control above to
+                      display every team’s live chart.
+                    </p>
+                  )}
                   <Status status={session.status} />
                 </div>
               ) : (
@@ -223,7 +295,11 @@ export default function LiveResultsPage({ projector = false }) {
                       </button>
                     </div>
                   </div>
-                  <ResultsView teams={teams} view={view} />
+                  <ResultsView
+                    teams={teams}
+                    view={view}
+                    presentation={projector}
+                  />
                   {!total && (
                     <p className="chart-note">
                       Waiting for the first vote. Teams with equal votes share

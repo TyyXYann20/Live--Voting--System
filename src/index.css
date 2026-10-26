@@ -707,6 +707,8 @@ input:read-only {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .projector-header a {
   margin-left: auto;
@@ -744,6 +746,136 @@ input:read-only {
 }
 .projector .results-layout {
   grid-template-columns: minmax(0, 2.4fr) minmax(320px, 1fr);
+}
+.projector .results-panel .results-chart {
+  scrollbar-width: thin;
+}
+.projector .hidden-admin-help {
+  font-size: 12px;
+  max-width: 360px;
+}
+@media (min-width: 1000px) and (min-height: 700px) {
+  .projector {
+    height: 100dvh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 22px 32px;
+  }
+  .projector-header {
+    flex-shrink: 0;
+    margin-bottom: 16px;
+  }
+  .projector .page-heading {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    margin-bottom: 18px;
+  }
+  .projector .page-heading h1 {
+    font-size: 32px;
+  }
+  .projector .page-heading p {
+    margin-top: 5px;
+  }
+  .projector .heading-actions {
+    width: auto;
+  }
+  .projector .live-meta {
+    margin: 0 0 14px;
+    flex-shrink: 0;
+  }
+  .projector .stats-grid {
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+  .projector .stat {
+    min-height: 90px;
+    padding: 16px 20px;
+  }
+  .projector .stat strong {
+    font-size: 28px;
+  }
+  .projector .results-layout {
+    flex: 1;
+    min-height: 0;
+  }
+  .projector .results-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 23px;
+  }
+  .projector .results-panel > .section-heading {
+    flex-shrink: 0;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .projector .results-chart {
+    min-height: 0;
+    overflow-y: auto;
+    margin: 10px -10px;
+  }
+  .projector .results-panel > .results-chart {
+    flex: 1;
+  }
+  .projector .results-panel > .podium {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 15px;
+  }
+  .projector .results-panel > .rankings {
+    max-height: 40%;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .projector .ranking-row {
+    padding: 12px 0;
+    font-size: 14px;
+  }
+  .projector .hidden-message {
+    min-height: 0;
+    height: 100%;
+    padding: 20px;
+  }
+  .projector .qr-panel {
+    padding: 18px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .projector .qr-panel > .section-heading {
+    margin-bottom: 8px;
+  }
+  .projector .qr-panel h2 {
+    font-size: 23px;
+  }
+  .projector .qr-panel .section-heading p {
+    font-size: 12px;
+  }
+  .projector .qr-image {
+    width: clamp(180px, 24vh, 260px);
+    margin: 10px auto;
+  }
+  .projector .qr-image canvas {
+    width: 100% !important;
+  }
+  .projector .instructions {
+    font-size: 14px;
+    margin: 13px 0;
+    gap: 8px;
+  }
+  .projector .copy-link {
+    margin-bottom: 8px;
+  }
+  .projector .qr-panel > .secondary {
+    min-height: 36px;
+    padding: 8px 12px;
+  }
+  .projector .qr-panel > .text-button {
+    padding: 7px 12px;
+  }
 }
 .podium {
   display: flex;

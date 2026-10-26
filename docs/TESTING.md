@@ -25,6 +25,8 @@ Run against a dedicated Supabase test project and production-like HTTPS build. N
 
 Apply `202610270001_participant_management.sql` once to an existing test project after the original migration. Existing sessions, participants and votes must remain unchanged by applying it.
 
+For fullscreen projector changes (no new SQL): sign in as admin, hide results, and click **Show results & full screen**. Verify that this authorized action reveals the real event's results publicly, all team counts/percentages update with incoming votes, and the QR stays visible on the actual projector. Exit using the button and Escape; fullscreen labels must stay accurate. A fresh public viewer must remain unable to reveal a hidden event. Confirm backend errors keep results hidden and unsupported browsers retain the normal projector view.
+
 - In a live session, revoke a participant's vote. The ballot must disappear from `votes`, live totals must decrease, the original ballot/actor/time must appear only in the admin `participant_events` audit, and the registration must remain.
 - Refresh the participant page in the original browser. Submit again with the original team (and original code in secure mode); exactly one replacement vote is accepted. The next duplicate fails. Repeat in both code and open modes.
 - Race revoke against a replacement vote on distinct database connections. Session/participant locks must serialize the operations without allowing two active ballots.

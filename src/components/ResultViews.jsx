@@ -7,27 +7,35 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { Trophy, ArrowLeft } from "lucide-react";
 import { Modal, Empty } from "./UI";
-export function ResultsChart({ teams }) {
+export function ResultsChart({ teams, presentation = false, onSelect }) {
   return (
     <div className="results-chart">
       <ResponsiveContainer
         width="100%"
-        height={Math.max(220, teams.length * 53)}
+        height={Math.max(
+          presentation ? 250 : 220,
+          teams.length * (presentation ? 46 : 53),
+        )}
       >
         <BarChart
-          data={teams}
+          data={teams.map((t) => ({
+            ...t,
+            chartName: presentation ? `${t.rank}. ${t.name}` : t.name,
+            chartLabel: `${t.votes} (${t.percentage?.toFixed(1) || "0.0"}%)`,
+          }))}
           layout="vertical"
-          margin={{ left: 0, right: 24 }}
+          margin={{ left: 0, right: presentation ? 115 : 24 }}
         >
           <XAxis type="number" allowDecimals={false} hide />
           <YAxis
             type="category"
-            dataKey="name"
-            width={110}
-            tick={{ fill: "#c6cfdf", fontSize: 13 }}
+            dataKey="chartName"
+            width={presentation ? 135 : 110}
+            tick={{ fill: "#c6cfdf", fontSize: presentation ? 15 : 13 }}
             axisLine={false}
             tickLine={false}
           />
@@ -45,17 +53,27 @@ export function ResultsChart({ teams }) {
             name="Votes"
             radius={[0, 5, 5, 0]}
             maxBarSize={25}
+            onClick={(entry) => onSelect?.(entry.payload)}
+            style={onSelect ? { cursor: "pointer" } : undefined}
           >
             {teams.map((t) => (
               <Cell key={t.id} fill={t.color} />
             ))}
+            {presentation && (
+              <LabelList
+                dataKey="chartLabel"
+                position="right"
+                fill="#e9eef8"
+                fontSize={14}
+              />
+            )}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
-export function ResultsView({ teams, view = "all" }) {
+export function ResultsView({ teams, view = "all", presentation = false }) {
   const [selected, setSelected] = useState(null);
   const shown = view === "top" ? teams.filter((t) => t.rank <= 3) : teams;
   if (!teams.length)
@@ -67,7 +85,11 @@ export function ResultsView({ teams, view = "all" }) {
   return (
     <>
       {view === "all" ? (
-        <ResultsChart teams={teams} />
+        <ResultsChart
+          teams={teams}
+          presentation={presentation}
+          onSelect={presentation ? setSelected : undefined}
+        />
       ) : (
         <div className="podium">
           {shown.map((t) => (
@@ -88,24 +110,26 @@ export function ResultsView({ teams, view = "all" }) {
           ))}
         </div>
       )}
-      <div className="rankings">
-        {shown.map((t) => (
-          <button
-            className="ranking-row"
-            key={t.id}
-            onClick={() => setSelected(t)}
-          >
-            <span className="rank">{String(t.rank).padStart(2, "0")}</span>
-            <span className="team-dot" style={{ background: t.color }} />
-            <b>{t.name}</b>
-            <span className="progress">
-              <i style={{ width: `${t.percentage}%`, background: t.color }} />
-            </span>
-            <strong>{t.votes}</strong>
-            <span className="muted percent">{t.percentage.toFixed(1)}%</span>
-          </button>
-        ))}
-      </div>
+      {(!presentation || view === "top") && (
+        <div className="rankings">
+          {shown.map((t) => (
+            <button
+              className="ranking-row"
+              key={t.id}
+              onClick={() => setSelected(t)}
+            >
+              <span className="rank">{String(t.rank).padStart(2, "0")}</span>
+              <span className="team-dot" style={{ background: t.color }} />
+              <b>{t.name}</b>
+              <span className="progress">
+                <i style={{ width: `${t.percentage}%`, background: t.color }} />
+              </span>
+              <strong>{t.votes}</strong>
+              <span className="muted percent">{t.percentage.toFixed(1)}%</span>
+            </button>
+          ))}
+        </div>
+      )}
       {selected && (
         <Modal title={selected.name} onClose={() => setSelected(null)}>
           <div className="team-detail">

@@ -21,6 +21,9 @@ async function fixture(
     people = [],
     ballots = [],
     managementError = null,
+    teamList = teams,
+    scores = [72, 58, 46],
+    visibilityError = null,
   } = {},
 ) {
   const errors = [];
@@ -82,7 +85,7 @@ async function fixture(
       if (name === "get_results")
         data = {
           hidden: !admin && !session.results_visible,
-          teams: teams.map((t, i) => ({ ...t, votes: [72, 58, 46][i] })),
+          teams: teamList.map((t, i) => ({ ...t, votes: scores[i] || 0 })),
         };
       if (name === "submit_vote") data = "40000000-0000-4000-8000-000000000001";
       if (name === "resolve_participant")
@@ -110,6 +113,14 @@ async function fixture(
       }
       if (name === "session_action") {
         const ac = body.p_action;
+        if (ac === "show" && visibilityError) {
+          await route.fulfill({
+            status: 403,
+            contentType: "application/json",
+            body: JSON.stringify({ message: visibilityError, code: "42501" }),
+          });
+          return;
+        }
         if (ac === "hide") session.results_visible = false;
         if (ac === "show") session.results_visible = true;
         if (ac === "pause") session.status = "PAUSED";
@@ -123,7 +134,7 @@ async function fixture(
       if (name === "save_session" || name === "save_team") data = sid;
     } else if (url.pathname.includes("/rest/v1/voting_sessions"))
       data = [session];
-    else if (url.pathname.includes("/rest/v1/teams")) data = teams;
+    else if (url.pathname.includes("/rest/v1/teams")) data = teamList;
     else if (url.pathname.includes("/rest/v1/participants")) data = people;
     else if (url.pathname.includes("/rest/v1/votes")) data = ballots;
     else if (url.pathname.includes("/auth/v1/"))
@@ -140,7 +151,7 @@ async function fixture(
       body: JSON.stringify(data),
     });
   });
-  return { session, calls, errors };
+  return { session, calls, errors, scores };
 }
 test("participant mobile flow excludes own team, confirms and records receipt", async ({
   page,
@@ -568,4 +579,160 @@ test("desktop participant management keeps actions visible and filters voting st
   await page.screenshot({
     path: join(tmpdir(), "pulse-voting-qa", "desktop-revoke.png"),
   });
+});
+
+test("admin fullscreen reveals every team, keeps QR visible, and refreshes vote counts", async ({
+  page,
+}) => {
+  const teamList = [
+    ...teams,
+    ...["Apex", "Horizon", "Vertex"].map((name, i) => ({
+      id: `20000000-0000-4000-8000-00000000000${i + 4}`,
+      session_id: sid,
+      name,
+      color: ["#ffb164", "#fc86b7", "#7debd0"][i],
+      is_active: true,
+    })),
+  ];
+  const { scores, calls, errors } = await fixture(page, {
+    admin: true,
+    visible: false,
+    teamList,
+    scores: [72, 58, 46, 32, 24, 16],
+  });
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.clock.install();
+  await page.goto(`/projector/${sid}`);
+  await expect(page.getByText("The big reveal is coming.")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Show results & full screen", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Exit full screen", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => Boolean(document.fullscreenElement)),
+  ).toBeTruthy();
+  await expect(
+    page.locator(".stat").filter({ hasText: "Total votes" }).locator("strong"),
+  ).toHaveText("248");
+  await expect(
+    page.getByRole("button", { name: "All results", exact: true }),
+  ).toHaveClass("active");
+  for (const team of teamList)
+    await expect(
+      page
+        .locator(".results-panel")
+        .getByText(new RegExp(`\\d+\\. ${team.name}$`)),
+    ).toBeVisible();
+  await expect(
+    page.locator(".results-panel").getByText("72 (29.0%)", { exact: true }),
+  ).toBeVisible();
+  const qr = page.locator(".qr-image canvas");
+  await expect(qr).toBeVisible();
+  const canvas = await qr.elementHandle();
+  scores[5] += 3;
+  await page.clock.fastForward(11000);
+  await expect(
+    page.locator(".stat").filter({ hasText: "Total votes" }).locator("strong"),
+  ).toHaveText("251");
+  expect(await canvas.evaluate((el) => el.isConnected)).toBeTruthy();
+  await expect(
+    page.locator(".results-panel").getByText("19 (7.6%)", { exact: true }),
+  ).toBeVisible();
+  const chart = await page.locator(".results-chart").boundingBox();
+  const qrBox = await qr.boundingBox();
+  expect(chart.y + chart.height).toBeLessThanOrEqual(900);
+  expect(qrBox.y + qrBox.height).toBeLessThanOrEqual(900);
+  await page.screenshot({
+    path: join(tmpdir(), "pulse-voting-qa", "fullscreen-projector.png"),
+  });
+  await page
+    .getByRole("button", { name: "Exit full screen", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBeFalsy();
+  expect(
+    calls
+      .filter((c) => c.name === "session_action")
+      .map((c) => c.body.p_action),
+  ).toEqual(["show"]);
+  expect(errors).toEqual([]);
+});
+
+test("projector show/hide controls and fullscreen reset Top 3 back to all teams", async ({
+  page,
+}) => {
+  await fixture(page, { admin: true, visible: true });
+  await page.goto(`/projector/${sid}`);
+  await page.getByRole("button", { name: "Top 3", exact: true }).click();
+  await expect(page.locator(".podium")).toBeVisible();
+  await page.getByRole("button", { name: "Full screen", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "All results", exact: true }),
+  ).toHaveClass("active");
+  await expect(page.locator(".results-chart")).toBeVisible();
+  await page.getByRole("button", { name: "Hide results", exact: true }).click();
+  await expect(page.getByText("The big reveal is coming.")).toBeVisible();
+  await expect(page.getByText("Total votes", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".qr-image canvas")).toBeVisible();
+  await page.getByRole("button", { name: "Show results", exact: true }).click();
+  await expect(page.getByText("Total votes", { exact: true })).toBeVisible();
+});
+
+test("a public fullscreen viewer cannot reveal hidden results", async ({
+  page,
+}) => {
+  const { calls } = await fixture(page, { visible: false });
+  await page.goto(`/projector/${sid}`);
+  await expect(
+    page.getByRole("button", { name: "Show results", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Full screen", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Exit full screen", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("The big reveal is coming.")).toBeVisible();
+  await expect(page.getByText("Total votes", { exact: true })).toHaveCount(0);
+  expect(calls.filter((c) => c.name === "session_action")).toHaveLength(0);
+});
+
+test("failed reveal stays hidden even when the browser enters fullscreen", async ({
+  page,
+}) => {
+  await fixture(page, {
+    admin: true,
+    visible: false,
+    visibilityError: "Administrator access required",
+  });
+  await page.goto(`/projector/${sid}`);
+  await page
+    .getByRole("button", { name: "Show results & full screen", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Administrator access required",
+  );
+  await expect(page.getByText("The big reveal is coming.")).toBeVisible();
+  await expect(page.getByText("Total votes", { exact: true })).toHaveCount(0);
+});
+
+test("unsupported fullscreen still reveals results in normal projector mode", async ({
+  page,
+}) => {
+  await fixture(page, { admin: true, visible: false });
+  await page.addInitScript(() => {
+    Element.prototype.requestFullscreen = () =>
+      Promise.reject(new Error("Not supported"));
+  });
+  await page.goto(`/projector/${sid}`);
+  await page
+    .getByRole("button", { name: "Show results & full screen", exact: true })
+    .click();
+  await expect(page.getByText("Total votes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "Fullscreen is unavailable",
+  );
+  await expect(page.locator(".results-chart")).toBeVisible();
+  await expect(page.locator(".qr-image canvas")).toBeVisible();
 });
