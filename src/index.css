@@ -230,6 +230,14 @@ input:read-only {
 .brand-dot {
   color: var(--lime);
 }
+.brand-name {
+  font-size: 20px;
+  letter-spacing: -0.6px;
+  white-space: nowrap;
+}
+.sidebar .brand-name {
+  font-size: 16px;
+}
 .panel {
   border: 1px solid var(--border);
   background: linear-gradient(135deg, #131f31, #101a2b);
@@ -1779,6 +1787,9 @@ dialog > .primary {
   .sidebar .brand svg {
     width: 24px;
   }
+  .sidebar .brand-name {
+    font-size: 14px;
+  }
   .main {
     margin-left: 175px;
     width: calc(100% - 175px);
@@ -1870,6 +1881,9 @@ dialog > .primary {
   }
   .sidebar .brand {
     font-size: 22px;
+  }
+  .sidebar .brand-name {
+    font-size: 20px;
   }
   .sidebar > .workspace-label,
   .sidebar-bottom {

@@ -35,8 +35,8 @@ export function Brand() {
   return (
     <span className="brand">
       <Activity />
-      <span>
-        PULSE<span className="brand-dot">.</span>
+      <span className="brand-name">
+        Coding <span className="brand-dot">12PM</span>
       </span>
     </span>
   );

@@ -10,7 +10,7 @@ export default function QRCodePanel({ session }) {
   const url = votingUrl(session.id);
   function download() {
     const a = document.createElement("a");
-    a.download = `pulse-${session.id}.png`;
+    a.download = `coding-12pm-${session.id}.png`;
     a.href = ref.current.toDataURL("image/png");
     a.click();
   }

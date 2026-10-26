@@ -78,7 +78,7 @@ export function PublicLayout() {
         <Outlet />
       </main>
       <footer>
-        Every team. Every voice. <span>Powered by Pulse</span>
+        Every team. Every voice. <span>Powered by Coding 12PM</span>
       </footer>
       {!configured && (
         <div className="setup-note">
