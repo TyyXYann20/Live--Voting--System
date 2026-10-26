@@ -70,9 +70,6 @@ export function PublicLayout() {
         <Link to="/vote">
           <Brand />
         </Link>
-        <Link className="muted" to="/admin/login">
-          Admin access <ArrowUpRight size={15} />
-        </Link>
       </header>
       <main>
         <Outlet />
